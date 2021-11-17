@@ -1,59 +1,88 @@
 const SHA256 = require("crypto-js/sha256");
+const { MerkleTree } = require('merkletreejs')
 
-let date = new Date();
-currentDate = `${date.getDate()}/${date.getMonth()}/${date.getFullYear()}`;
+let timestamp = () => {
+  let date = new Date();
+  return `${date.getDate()}/${date.getMonth()}/${date.getFullYear()}-${date.getHours()}:${date.getMinutes()}`;
+};
+
+let hashIt = (...argument) => {
+  let arguments = "";
+  argument.forEach((argument) => {
+    arguments += argument;
+  });
+  return SHA256(arguments).toString();
+};
+
+
+class Transaction {
+  constructor(payer, payee, amount) {
+    this.payer = payer;
+    this.payee = payee;
+    this.amount = amount;
+    this.timestamp = timestamp(); //Timestamp not included in hash hashIt function
+    this.txHash = hashIt(payer, payee, amount);
+  }
+}
 
 class Block {
-  constructor(index, timestamp, nonce, data, prevHash) {
-    this.index = index;
-    this.timestamp = timestamp;
-    this.nonce = nonce;
-    this.data = data;
-    this.prevHash = prevHash;
-    this.hash = this.hashBlock();
+  constructor() {
+    this.index = 0 // When block not in chain, index = 0
+    this.txNum = 0; // 0 transactions at block init
+    this.txVol = 0; // 0 volume at block init
+    this.timestamp = timestamp();
+    this.transactions = [];
+    this.merkleLeaves = [this.timestamp]; // default merkle leaf at init
+    this.merkleRoot = this.merkleRoot();
+    this.prevBlock = '' // When block not in chain, prevBlock = 0
+    this.hash = this.hashBlock()
   }
 
-  hashBlock() {
-    return SHA256(
-      this.index +
-        this.timestamp +
-        this.nonce +
-        this.prevHash +
-        JSON.stringify(this.data)
-    ).toString();
+  addTransaction(payer, payee, amount){
+    let currentTx = new Transaction(payer, payee, amount);
+    this.transactions.push(currentTx);
+    this.merkleLeaves.push(currentTx.txHash)
+    this.txNum += 1
+    this.txVol += amount
+    this.hash = this.hashBlock()
+  }
+
+  merkleRoot(){
+    let merkleTree = new MerkleTree(this.merkleLeaves, SHA256)
+    return merkleTree.getRoot().toString('hex')
+  }
+
+  hashBlock(){
+    return hashIt(this.txNum, this.txVol, this.merkleRoot, this.prevBlock);
   }
 }
 
 class Blockchain {
-  constructor() {
-    this.chain = [this.createGenesisBlock()];
+  constructor(){
+    this.timestamp = timestamp();
+    this.chain = []
+    this.createGenesisBlock()
   }
-  createGenesisBlock() {
-    return new Block(
-      0,
-      currentDate,
-      8765,
-      JSON.stringify({ data: 5132123 }),
-      0
-    );
+
+  createGenesisBlock(){
+    this.chain.push(new Block())
   }
-  prevBlock() {
-    return this.chain[this.chain.length - 1];
+
+  createNextBlock(){
+    let nextBlock = new Block()
+    nextBlock.prevBlock = this.chain[this.chain.length - 1].hash
+    nextBlock.index = this.chain[this.chain.length - 1].index + 1
+    nextBlock.hash = nextBlock.hashBlock()
+    this.chain.push(nextBlock)
   }
-  addBlock() {
-    this.chain.push(
-      new Block(
-        this.chain.length,
-        currentDate,
-        15215,
-        JSON.stringify({ data: "transaction" }),
-        this.prevBlock().hashBlock()
-      )
-    );
+
+  getLatestBlock(){
+    return this.chain[this.chain - 1]
   }
 }
 
-const kalekocoin = new Blockchain();
-kalekocoin.addBlock(); //The second block
-kalekocoin.addBlock(); //The third block
-console.log(kalekocoin);
+let koin = new Blockchain()
+koin.createNextBlock()
+koin.createNextBlock()
+koin.createNextBlock()
+console.log(koin)
